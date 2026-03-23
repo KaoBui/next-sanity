@@ -1,65 +1,95 @@
-import Image from "next/image";
+import Link from "next/link";
+import { PortableText, type SanityDocument } from "next-sanity";
+import { createImageUrlBuilder, type SanityImageSource } from "@sanity/image-url";
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+import { client } from "@/lib/sanity/client";
+
+const HOME_PAGE_QUERY = `*[_type == "homePage"][0]{
+  _id,
+  title,
+  subtitle,
+  heroImage,
+  body,
+  featuredPosts[]->{
+    _id,
+    title,
+    slug,
+    publishedAt
+  }
+}`;
+
+const { projectId, dataset } = client.config();
+const urlFor = (source: SanityImageSource) =>
+  projectId && dataset
+    ? createImageUrlBuilder({ projectId, dataset }).image(source)
+    : null;
+
+const options = { next: { revalidate: 30 } };
+
+export default async function IndexPage() {
+  const homePage = await client.fetch<SanityDocument | null>(
+    HOME_PAGE_QUERY,
+    {},
+    options
+  );
+
+  if (!homePage) {
+    return (
+      <main className="container mx-auto min-h-screen max-w-3xl p-8">
+        <h1 className="mb-4 text-4xl font-bold">Home Page not set up</h1>
+        <p>Create a `Home Page` document in Sanity Studio to manage this page.</p>
       </main>
-    </div>
+    );
+  }
+
+  const heroImageUrl = homePage.heroImage
+    ? urlFor(homePage.heroImage)?.width(1200).height(700).url()
+    : null;
+
+  return (
+    <main className="container mx-auto min-h-screen max-w-4xl p-8">
+      <section className="flex flex-col gap-6">
+        <div className="flex flex-col gap-3">
+          <h1 className="text-4xl font-bold">{homePage.title}</h1>
+          {homePage.subtitle && (
+            <p className="max-w-2xl text-lg text-gray-700">{homePage.subtitle}</p>
+          )}
+        </div>
+
+        {heroImageUrl && (
+          <img
+            src={heroImageUrl}
+            alt={homePage.title}
+            className="aspect-[16/9] rounded-2xl object-cover"
+            width="1200"
+            height="700"
+          />
+        )}
+
+        {Array.isArray(homePage.body) && (
+          <div className="prose max-w-none">
+            <PortableText value={homePage.body} />
+          </div>
+        )}
+      </section>
+
+      {Array.isArray(homePage.featuredPosts) && homePage.featuredPosts.length > 0 && (
+        <section className="mt-12">
+          <h2 className="mb-6 text-2xl font-semibold">Featured Posts</h2>
+          <ul className="flex flex-col gap-4">
+            {homePage.featuredPosts.map((post: SanityDocument) => (
+              <li key={post._id}>
+                <Link href={`/${post.slug.current}`} className="hover:underline">
+                  <h3 className="text-xl font-medium">{post.title}</h3>
+                  {post.publishedAt && (
+                    <p>{new Date(post.publishedAt).toLocaleDateString()}</p>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </main>
   );
 }
